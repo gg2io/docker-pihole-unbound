@@ -1,40 +1,53 @@
 version: "3"
-
-# More info at https://github.com/pi-hole/docker-pi-hole/ and https://docs.pi-hole.net/
 services:
   pihole:
-    container_name: pihole-unbound
-    image: piholeunbound:latest
-    hostname: pi.hole.local 
+    container_name: pihole
+    image: pihole/pihole:latest
+    hostname: pi.hole.local
     networks:
-      pimacvlan: 
+      pimacvlan:
         ipv4_address: 10.13.1.100
-    # For DHCP it is recommended to remove these ports and instead add: network_mode: "host"
+        mac_address: "d2:23:02:88:96:66"
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "67:67/udp" # Only required if you are using Pi-hole as your DHCP server
+      - "67:67/udp"
       - "80:80/tcp"
     environment:
       TZ: 'Europe/London'
-      ServerIP: 10.13.1.100
-      WEBPASSWORD: 'password' # Enter a secure password here
-    # Volumes store your data between container upgrades
+      FTLCONF_webserver_api_password_FILE: /run/secrets/pihole_password
+      FTLCONF_misc_etc_dnsmasq_d: 'true'
+      FTLCONF_dns_upstreams: '127.0.0.1#5335'
+      FTLCONF_dns_listeningMode: 'ALL'
+      FTLCONF_dns_specialDomains_iCloudPrivateRelay: 'false'
     volumes:
       - './etc-pihole:/etc/pihole'
       - './etc-dnsmasq.d:/etc/dnsmasq.d'
-    #   https://github.com/pi-hole/docker-pi-hole#note-on-capabilities
+    secrets:
+      - pihole_password
     cap_add:
-      - NET_ADMIN # Required if you are using Pi-hole as your DHCP server, else not needed
+      - NET_ADMIN
+    restart: unless-stopped
+
+  unbound:
+    container_name: unbound
+    image: alpinelinux/unbound:latest
+    network_mode: "service:pihole"
+    volumes:
+      - './unbound/pi-hole.conf:/etc/unbound/unbound.conf'
     restart: unless-stopped
 
 networks:
   pimacvlan:
     driver: macvlan
-    driver_opts: 
-      parent: eth0 # Use 'ip link show' to determine which NIC
+    driver_opts:
+      parent: end0
     ipam:
       config:
         - subnet: 10.13.1.0/24
           gateway: 10.13.1.1
           ip_range: 10.13.1.100/32
+
+secrets:
+  pihole_password:
+    file: ./pihole_password.txt
